@@ -1,13 +1,82 @@
 import streamlit as st
 import json
-from ai_engine import analyse_job, analyse_job_requirements, generate_learning_plan, extract_cv_skills
-from openai import APIConnectionError, AuthenticationError
-from skill_matching import calculate_weighted_match, normalise_skill
+from ai_engine import (
+    analyse_cv_job_match,
+    analyse_job_requirements,
+    generate_learning_plan,
+    extract_cv_skills,
+)
+from openai import APIConnectionError, AuthenticationError, APIError
+from skill_matching import (
+    calculate_cv_match_score,
+    calculate_weighted_match,
+    normalise_skill,
+    normalise_skills,
+)
 from cv_reader import read_cv
+from cv_matching import cached_match_is_current, cv_fingerprint, matching_inputs, valid_cv_text
 from jobs_api import search_jobs, filter_senior_jobs, filter_by_salary, filter_by_work_type, filter_by_experience
 from requests.exceptions import RequestException
 from job_comparison import find_best_job
 from sample_jobs import SAMPLE_JOBS
+
+
+def _job_company(job):
+    return job.get("company", {}).get("display_name", "Unknown")
+
+
+def _job_location(job):
+    return job.get("location", {}).get("display_name", "Unknown")
+
+
+def _job_key(job):
+    """Return a stable key even when an Adzuna result has no id."""
+    job_id = job.get("id")
+    if job_id is not None:
+        return str(job_id)
+
+    return "|".join(
+        (
+            str(job.get("title", "")),
+            _job_company(job),
+            _job_location(job),
+            str(job.get("redirect_url", "")),
+        )
+    )
+
+
+def _salary_text(job):
+    salary_min = job.get("salary_min")
+    salary_max = job.get("salary_max")
+
+    if salary_min is not None and salary_max is not None:
+        if salary_min == salary_max:
+            return f"£{salary_min:,.0f}"
+        return f"£{salary_min:,.0f} - £{salary_max:,.0f}"
+    if salary_min is not None:
+        return f"From £{salary_min:,.0f}"
+    if salary_max is not None:
+        return f"Up to £{salary_max:,.0f}"
+    return "Not advertised"
+
+
+def _normalise_skills(skills):
+    return normalise_skills(skills)
+
+
+for key, default in {
+    "cv_skills": [],
+    "searched_jobs": [],
+    "comparison_results": [],
+    "comparison_inputs": None,
+    "learning_plans": {},
+    "cv_job_match": None,
+    "cv_text": "",
+    "cv_fingerprint": None,
+    "cv_skills_fingerprint": None,
+    "cv_job_match_inputs": None,
+}.items():
+    st.session_state.setdefault(key, default)
 
 st.title("AI Job Assistant V3")
 st.write("Welcome to your AI-powered career assistant!")
@@ -22,44 +91,61 @@ if uploaded_cv is not None:
     st.success("CV uploaded successfully!")
     try:
         cv_text = read_cv(uploaded_cv)
+        uploaded_fingerprint = cv_fingerprint(uploaded_cv)
+        if uploaded_fingerprint != st.session_state.get("cv_fingerprint"):
+            st.session_state["cv_fingerprint"] = uploaded_fingerprint
+            st.session_state["cv_text"] = cv_text
+            st.session_state["cv_skills"] = []
+            st.session_state["cv_skills_fingerprint"] = None
+            st.session_state["cv_job_match"] = None
+            st.session_state["cv_job_match_inputs"] = None
         st.write("CV text extracted successfully!")
     except ValueError as error:
         st.error(str(error))
         st.stop()
-    if st.button("Extract Skills from CV"):
-        if cv_text.strip():
-            try:
-                with st.spinner("AI is reading your CV..."):
-                    cv_skills = extract_cv_skills(cv_text)
-                    st.session_state["cv_skills"] = cv_skills
+    if (
+        cv_text.strip()
+        and st.session_state.get("cv_skills_fingerprint") != uploaded_fingerprint
+    ):
+        try:
+            with st.spinner("AI is reading your CV..."):
+                cv_skills = extract_cv_skills(cv_text)
+                st.session_state["cv_skills"] = cv_skills
+                st.session_state["cv_skills_fingerprint"] = uploaded_fingerprint
 
-            except APIConnectionError:
-                st.error("Unable to connect to OpenAI. Please check your connection.")
+        except APIConnectionError:
+            st.error("Unable to connect to OpenAI. Please check your connection.")
 
-            except AuthenticationError:
-                st.error("OpenAI authentication failed. Please check your API key.")
+        except AuthenticationError:
+            st.error("OpenAI authentication failed. Please check your API key.")
 
-            except (ValueError, AttributeError):
-                st.error("Unable to extract CV skills. Please try again.")
+        except APIError:
+            st.error("OpenAI could not process the CV. Please try again later.")
 
-            else:
-                st.success("CV skills extracted!")
-                st.write("Skills found in your CV:", cv_skills)
+        except (ValueError, AttributeError):
+            st.error("Unable to extract CV skills. Please try again.")
+
         else:
-            st.warning("No readable text found in this CV.")
+            st.success("CV skills extracted automatically!")
+            st.write("Skills found in your CV:", cv_skills)
+else:
+    st.session_state["cv_text"] = ""
+    st.session_state["cv_fingerprint"] = None
+    st.session_state["cv_skills"] = []
+    st.session_state["cv_skills_fingerprint"] = None
+    st.session_state["cv_job_match"] = None
+    st.session_state["cv_job_match_inputs"] = None
+
+cv_text = st.session_state.get("cv_text", "")
 
 user_skills = st.text_input(
     "Enter your technical skills (separated by commas):"
 )
 
 if user_skills.strip():
-    current_skills = [
-        skill.strip().lower()
-        for skill in user_skills.split(",")
-        if skill.strip()
-    ]
+    current_skills = _normalise_skills(user_skills.split(","))
 else:
-    current_skills = st.session_state.get("cv_skills", [])
+    current_skills = _normalise_skills(st.session_state["cv_skills"])
 
 if current_skills:
     st.write("Your skills:", current_skills)
@@ -120,6 +206,8 @@ experience_level = st.selectbox(
 if st.button("Search Jobs"):
     if not job_keywords.strip() or not job_location.strip():
         st.warning("Please enter both job keywords and a location.")
+    elif maximum_salary > 0 and minimum_salary > maximum_salary:
+        st.warning("Maximum salary must be greater than or equal to minimum salary.")
     else:
         st.write("Searching for UK tech jobs...")
         try:
@@ -152,30 +240,21 @@ if st.button("Search Jobs"):
 
 
 selected_job_description = ""
+selected_job = None
 
 
-if demo_mode or "searched_jobs" in st.session_state:
-    saved_jobs = st.session_state.get("searched_jobs", [])
+if demo_mode or st.session_state["searched_jobs"]:
+    saved_jobs = SAMPLE_JOBS if demo_mode else st.session_state["searched_jobs"]
     st.subheader("Your Saved Job Search Results")
 
     for job in saved_jobs:
         st.write(job.get("title", "Unknown job"))
 
-        st.write("Company:", job.get("company", {}).get("display_name", "Unknown"))
+        st.write("Company:", _job_company(job))
 
-        st.write("Location:", job.get("location", {}).get("display_name", "Unknown"))
+        st.write("Location:", _job_location(job))
 
-        salary_min = job.get("salary_min")
-        salary_max = job.get("salary_max")
-
-        if salary_min is not None and salary_max is not None:
-            st.write(f"Salary: £{salary_min:,.0f} - £{salary_max:,.0f}")
-        elif salary_min is not None:
-            st.write(f"Salary: From £{salary_min:,.0f}")
-        elif salary_max is not None:
-            st.write(f"Salary: Up to £{salary_max:,.0f}")
-        else:
-            st.write("Salary: Not advertised")
+        st.write("Salary:", _salary_text(job))
 
         st.write("Apply here:", job.get("redirect_url", "No link available"))
 
@@ -183,13 +262,12 @@ if demo_mode or "searched_jobs" in st.session_state:
 
     st.subheader("Compare Jobs")
 
-    comparison_job_options = SAMPLE_JOBS if demo_mode else saved_jobs
     selected_comparison_jobs = st.multiselect(
         "Select jobs to compare:",
-        comparison_job_options,
+        saved_jobs,
         format_func=lambda job: (
             f"{job.get('title', 'Unknown job')} - "
-            f"{job.get('company', {}).get('display_name', 'Unknown')} - "
+            f"{_job_company(job)} - "
             f"£{job.get('salary_min', 0):,.0f}"
         ),
         max_selections=3
@@ -202,26 +280,11 @@ if demo_mode or "searched_jobs" in st.session_state:
         comparison_data = []
 
         for job in selected_comparison_jobs:
-            salary_min = job.get("salary_min")
-            salary_max = job.get("salary_max")
-
-            if salary_min is not None and salary_max is not None:
-                if salary_min == salary_max:
-                    salary = f"£{salary_min:,.0f}"
-                else:
-                    salary = f"£{salary_min:,.0f} - £{salary_max:,.0f}"
-            elif salary_min is not None:
-                salary = f"From £{salary_min:,.0f}"
-            elif salary_max is not None:
-                salary = f"Up to £{salary_max:,.0f}"
-            else:
-                salary = "Not advertised"
-
             comparison_data.append({
                 "Job Title": job.get("title", "Unknown job"),
-                "Company": job.get("company", {}).get("display_name", "Unknown"),
-                "Location": job.get("location", {}).get("display_name", "Unknown"),
-                "Salary": salary
+                "Company": _job_company(job),
+                "Location": _job_location(job),
+                "Salary": _salary_text(job)
             })
 
         st.subheader("Job Comparison Results")
@@ -231,9 +294,9 @@ if demo_mode or "searched_jobs" in st.session_state:
             st.session_state["comparison_results"] = []
 
             st.session_state["comparison_inputs"] = (
-                tuple(sorted(normalise_skill(skill) for skill in current_skills)),
+                tuple(sorted(_normalise_skills(current_skills))),
                 demo_mode,
-                tuple(sorted(str(job.get("id")) for job in selected_comparison_jobs))
+                tuple(sorted(_job_key(job) for job in selected_comparison_jobs))
             )
 
             if not current_skills:
@@ -280,7 +343,7 @@ if demo_mode or "searched_jobs" in st.session_state:
 
                         detected_skills = sorted(essential_skills | desirable_skills)
 
-                except (APIConnectionError, AuthenticationError, json.JSONDecodeError, ValueError):
+                except (APIConnectionError, AuthenticationError, APIError, json.JSONDecodeError, ValueError):
                     st.error(
                         f"Unable to analyse {job.get('title', 'Unknown job')}."
                     )
@@ -325,9 +388,9 @@ if demo_mode or "searched_jobs" in st.session_state:
             st.success("Job comparison analysis finished!")
 
     comparison_inputs = (
-        tuple(sorted(normalise_skill(skill) for skill in current_skills)),
+        tuple(sorted(_normalise_skills(current_skills))),
         demo_mode,
-        tuple(sorted(str(job.get("id")) for job in selected_comparison_jobs))
+        tuple(sorted(_job_key(job) for job in selected_comparison_jobs))
     )
 
     if st.session_state.get("comparison_inputs") != comparison_inputs:
@@ -343,12 +406,7 @@ if demo_mode or "searched_jobs" in st.session_state:
 
             "Job Title": job.get("title", "Unknown job"),
 
-            "Salary Range": (
-                f"£{job['salary_min']:,.0f} - £{job['salary_max']:,.0f}"
-                if job.get("salary_min") is not None
-                   and job.get("salary_max") is not None
-                else "Not fully advertised"
-            ),
+            "Salary Range": _salary_text(job),
 
             "Match Score": (
                 f"{result['score']:.0f}%"
@@ -372,7 +430,7 @@ if demo_mode or "searched_jobs" in st.session_state:
 
             st.write(
                 f"**{job.get('title', 'Unknown job')} - "
-                f"{job.get('company', {}).get('display_name', 'Unknown')}**"
+                f"{_job_company(job)}**"
             )
 
             if match_score is not None:
@@ -428,94 +486,79 @@ st.subheader("Job Description Analyser")
 
 job_description = st.text_area(
     "Paste a job description here:",
-    value=selected_job_description
+    value=selected_job_description,
+    key=f"job_description_{_job_key(selected_job) if selected_job is not None else 'manual'}"
 )
 
-if st.button("Analyse Job"):
-    if job_description.strip():
+if st.button("Analyse CV against this job"):
+    if not valid_cv_text(cv_text):
+        st.warning("Upload a readable CV first. The detailed analysis uses CV text, not only a skill list.")
+    elif not job_description.strip():
+        st.warning("Please paste or select a job description first.")
+    else:
         try:
-            with st.spinner("AI is analysing the job..."):
-                requirements = analyse_job_requirements(job_description)
-
-                essential_skills = {
-                    normalise_skill(skill)
-                    for skill in requirements["essential_skills"]
-                }
-
-                desirable_skills = {
-                                       normalise_skill(skill)
-                                       for skill in requirements["desirable_skills"]
-                                   } - essential_skills
-
-                detected_skills = sorted(essential_skills | desirable_skills)
-                st.session_state["detected_skills"] = detected_skills
-
-        except APIConnectionError:
-            st.error("Unable to connect to OpenAI. Please check your connection.")
+            with st.spinner("AI is comparing your CV with this job..."):
+                cv_job_match = analyse_cv_job_match(cv_text, job_description)
+                cv_job_match["score"] = calculate_cv_match_score(
+                    cv_job_match["requirements"]
+                )
+                cv_job_match["inputs"] = matching_inputs(cv_text, job_description)
+                st.session_state["cv_job_match"] = cv_job_match
+                st.session_state["cv_job_match_inputs"] = cv_job_match["inputs"]
+                st.session_state["missing_skills"] = [
+                    item["requirement"]
+                    for item in cv_job_match["requirements"]
+                    if item["status"] == "gap"
+                ]
         except AuthenticationError:
             st.error("OpenAI authentication failed. Please check your API key.")
-
-        except (json.JSONDecodeError, ValueError):
-            st.error("The AI returned an invalid response. Please try analysing the job again.")
-
+        except (APIConnectionError, APIError):
+            st.error("Unable to connect to OpenAI. Please try again later.")
+        except (json.JSONDecodeError, ValueError, AttributeError):
+            st.error("The AI returned an invalid CV match response. Please try again.")
         else:
-            st.success("Job analysis complete!")
-            st.write("Skills detected:", detected_skills)
-            skill_weights = {
-                skill: 3 if skill in essential_skills else 1
-                for skill in detected_skills
-            }
+            st.success("CV-to-job analysis complete.")
 
-            if user_skills.strip():
-                skills_to_use = user_skills.split(",")
-            else:
-                skills_to_use = st.session_state.get("cv_skills", [])
+cv_job_match = st.session_state.get("cv_job_match")
+if cv_job_match and cached_match_is_current(
+    st.session_state.get("cv_job_match_inputs"), cv_text, job_description
+):
+    st.subheader("CV-to-Job Match")
+    st.caption(
+        "This is an AI-assisted heuristic based only on the job details and CV text provided. "
+        "It is not a scientifically calibrated probability of getting hired. "
+        "Requirements not mentioned in the CV are not counted as gaps."
+    )
 
-            current_skills = {
-                normalise_skill(skill)
-                for skill in skills_to_use
-                if skill.strip()
-            }
-
-            required_skills = {
-                normalise_skill(skill)
-                for skill in detected_skills
-            }
-
-            matching_skills = sorted(required_skills & current_skills)
-            missing_skills = sorted(required_skills - current_skills)
-            match_score = calculate_weighted_match(
-                required_skills,
-                matching_skills,
-                skill_weights
-            )
-
-            st.write(f"Job Match Score: {match_score:.0f}%")
-            st.write("✅ Matching skills:", matching_skills)
-            st.write("📚 Missing skills:", missing_skills)
-            st.session_state["missing_skills"] = missing_skills
-            st.session_state["job_result"] = {
-                "detected_skills": detected_skills,
-                "matching_skills": matching_skills,
-                "missing_skills": missing_skills,
-                "score": match_score
-            }
-
-            if len(detected_skills) == 0:
-                st.warning("No technical skills detected. Unable to assess this job reliably.")
-            elif len(detected_skills) == 1:
-                st.warning("Limited information: only one technical skill detected.")
-            elif match_score >= 80:
-                st.success("Excellent match - you should consider applying!")
-            elif match_score >= 60:
-                st.info("Good match - definitely consider applying.")
-            elif match_score >= 40:
-                st.info("Possible match - work on your missing skills.")
-            else:
-                st.warning("Low match - build more of the required skills first.")
-
+    score = cv_job_match.get("score")
+    if score is None:
+        st.info("There is not enough explicit CV evidence to calculate a reliable heuristic score.")
     else:
-        st.warning("Please paste a job description first.")
+        st.metric("Heuristic CV match", f"{score:.0f}%")
+
+    requirements = cv_job_match.get("requirements", [])
+    status_groups = (
+        ("matched", "Supported by your CV", "success"),
+        ("gap", "Potential gaps", "warning"),
+        ("not_mentioned", "Not mentioned in your CV", "info"),
+    )
+    for status, heading, message_type in status_groups:
+        items = [item for item in requirements if item["status"] == status]
+        if not items:
+            continue
+        getattr(st, message_type)(f"{heading}: {len(items)}")
+        for item in items:
+            importance = "Required" if item["importance"] == "required" else "Preferred"
+            with st.expander(f"{item['requirement']} · {importance}"):
+                st.write(item["explanation"])
+                if item["evidence"]:
+                    st.caption(f"CV evidence: {item['evidence']}")
+
+    suggestions = cv_job_match.get("suggestions", [])
+    if suggestions:
+        st.markdown("**Personalised CV improvements**")
+        for suggestion in suggestions:
+            st.write(f"- {suggestion}")
 
 if st.session_state.get("missing_skills"):
     generate_plans = st.checkbox("Generate learning plans for missing skills")
@@ -528,19 +571,9 @@ if st.session_state.get("missing_skills"):
                         plan = generate_learning_plan(skill)
                         st.session_state.setdefault("learning_plans", {})[skill] = plan
 
-                except APIConnectionError:
+                except (APIConnectionError, AuthenticationError, APIError):
                     st.error(f"Unable to generate a learning plan for {skill}.")
 
     for skill, plan in st.session_state.get("learning_plans", {}).items():
         st.subheader(f"{skill.title()} Learning Plan")
         st.write(plan)
-
-
-if "job_result" in st.session_state:
-    saved_result = st.session_state["job_result"]
-    st.subheader("Your Saved Job Analysis")
-    st.write("Skills detected:", saved_result["detected_skills"])
-    st.write("✅ Matching skills:", saved_result["matching_skills"])
-    st.write("📚 Missing skills:", saved_result["missing_skills"])
-    st.write(f"Job Match Score: {saved_result['score']:.0f}%")
-

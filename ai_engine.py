@@ -1,3 +1,5 @@
+import json
+
 from openai import OpenAI, APIConnectionError
 
 client = OpenAI()
@@ -50,8 +52,6 @@ def analyse_job(job_description):
         print("Unable to connect to OpenAI.")
         raise
 
-    import json
-
     data = json.loads(response.output_text)
 
     if (
@@ -71,8 +71,6 @@ def analyse_job(job_description):
 
 
 def analyse_job_requirements(job_description):
-    import json
-
     if not job_description.strip():
         return {
             "essential_skills": [],
@@ -160,6 +158,140 @@ def analyse_job_requirements(job_description):
     return {
         "essential_skills": essential,
         "desirable_skills": desirable
+    }
+
+
+def analyse_cv_job_match(cv_text, job_description):
+    """Compare CV evidence with one job description in a single AI request.
+
+    The model is instructed to quote or closely paraphrase only evidence in the
+    CV.  The returned status deliberately separates a genuine gap from a
+    requirement that the CV does not mention.
+    """
+    if not isinstance(cv_text, str) or not cv_text.strip():
+        raise ValueError("CV text is required for a CV-to-job analysis.")
+    if not isinstance(job_description, str) or not job_description.strip():
+        raise ValueError("Job description is required for a CV-to-job analysis.")
+
+    response = client.responses.create(
+        model="gpt-4.1-mini",
+        input=[
+            {
+                "role": "system",
+                "content": (
+                    "Assess how the candidate CV matches the supplied job description. "
+                    "Extract requirements only when explicitly stated in the job. "
+                    "Use status matched only when the CV provides direct supporting evidence. "
+                    "Recognise equivalent wording when the same explicit skill is evidenced, "
+                    "for example 'built a Python application using the OpenAI API' supports "
+                    "Python and OpenAI API experience. Treat 'Git' and 'Git version control' "
+                    "as the same skill. Do not infer Streamlit, prompt engineering or any "
+                    "other skill unless the CV explicitly supports it. "
+                    "Use gap only when the CV provides evidence that the candidate lacks "
+                    "the requirement. Use not_mentioned when the CV does not establish either "
+                    "case; do not treat silence as a gap. Never invent qualifications, skills, "
+                    "experience, achievements, employers, dates or levels. Keep evidence and "
+                    "explanations concise. Suggestions must be practical CV improvements and "
+                    "must never ask the candidate to claim something unsupported. Return an "
+                    "empty requirements list if the job contains no assessable requirements."
+                )
+            },
+            {
+                "role": "user",
+                "content": (
+                    "CANDIDATE CV:\n"
+                    f"{cv_text}\n\n"
+                    "JOB DESCRIPTION:\n"
+                    f"{job_description}"
+                )
+            }
+        ],
+        text={
+            "format": {
+                "type": "json_schema",
+                "name": "cv_job_match",
+                "strict": True,
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "requirements": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "requirement": {"type": "string"},
+                                    "category": {
+                                        "type": "string",
+                                        "enum": ["skill", "experience", "qualification", "other"]
+                                    },
+                                    "importance": {
+                                        "type": "string",
+                                        "enum": ["required", "preferred"]
+                                    },
+                                    "status": {
+                                        "type": "string",
+                                        "enum": ["matched", "gap", "not_mentioned"]
+                                    },
+                                    "evidence": {"type": "string"},
+                                    "explanation": {"type": "string"}
+                                },
+                                "required": [
+                                    "requirement", "category", "importance", "status",
+                                    "evidence", "explanation"
+                                ],
+                                "additionalProperties": False
+                            }
+                        },
+                        "suggestions": {
+                            "type": "array",
+                            "items": {"type": "string"}
+                        }
+                    },
+                    "required": ["requirements", "suggestions"],
+                    "additionalProperties": False
+                }
+            }
+        }
+    )
+
+    data = json.loads(response.output_text)
+    if not isinstance(data, dict):
+        raise ValueError("Invalid AI response: expected an object.")
+
+    requirements = data.get("requirements")
+    suggestions = data.get("suggestions")
+    if not isinstance(requirements, list) or not isinstance(suggestions, list):
+        raise ValueError("Invalid AI response: requirements and suggestions must be lists.")
+
+    allowed_categories = {"skill", "experience", "qualification", "other"}
+    allowed_importance = {"required", "preferred"}
+    allowed_statuses = {"matched", "gap", "not_mentioned"}
+    cleaned_requirements = []
+    for item in requirements:
+        if not isinstance(item, dict):
+            raise ValueError("Invalid AI response: each requirement must be an object.")
+        if not all(isinstance(item.get(key), str) for key in (
+            "requirement", "category", "importance", "status", "evidence", "explanation"
+        )):
+            raise ValueError("Invalid AI response: requirement fields must be strings.")
+        if (
+            not item["requirement"].strip()
+            or item["category"] not in allowed_categories
+            or item["importance"] not in allowed_importance
+            or item["status"] not in allowed_statuses
+        ):
+            raise ValueError("Invalid AI response: unsupported requirement value.")
+        cleaned_requirements.append({
+            key: item[key].strip()
+            for key in ("requirement", "category", "importance", "status", "evidence", "explanation")
+        })
+
+    if not all(isinstance(suggestion, str) and suggestion.strip() for suggestion in suggestions):
+        raise ValueError("Invalid AI response: suggestions must be non-empty strings.")
+
+    return {
+        "requirements": cleaned_requirements,
+        "suggestions": list(dict.fromkeys(suggestion.strip() for suggestion in suggestions))
     }
 
 
