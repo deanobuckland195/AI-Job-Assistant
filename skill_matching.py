@@ -75,17 +75,48 @@ def calculate_weighted_match(detected_skills, job_matching_skills, skill_weights
     return (matched_weight / total_weight) * 100
 
 
-def calculate_cv_match_score(requirements):
-    """Return a transparent heuristic score from structured CV evidence.
+def deduplicate_requirements(requirements):
+    """Return one entry per explicitly extracted requirement.
 
-    Requirements marked not_mentioned are excluded because absence of CV text
-    is not evidence of a genuine gap. Required items count three times as much
-    as preferred items.
+    AI output can repeat a requirement with different wording or evidence
+    states. Exact semantic equivalence is intentionally limited to normalized
+    text here: this prevents double-counting without inferring that two
+    different requirements are the same.
     """
-    assessed = [
-        requirement for requirement in requirements
-        if requirement.get("status") in {"matched", "gap"}
-    ]
+    status_priority = {"not_mentioned": 0, "gap": 1, "matched": 2}
+    unique = {}
+
+    for requirement in requirements or []:
+        if not isinstance(requirement, dict):
+            continue
+        label = requirement.get("requirement")
+        if not isinstance(label, str) or not label.strip():
+            continue
+        key = " ".join(label.casefold().split())
+        existing = unique.get(key)
+        if existing is None:
+            unique[key] = requirement
+            continue
+
+        current_status = status_priority.get(existing.get("status"), -1)
+        new_status = status_priority.get(requirement.get("status"), -1)
+        if new_status > current_status:
+            unique[key] = requirement
+        if requirement.get("importance") == "required":
+            unique[key] = {**unique[key], "importance": "required"}
+
+    return list(unique.values())
+
+
+def calculate_cv_match_score(requirements):
+    """Return CV requirement coverage from all unique extracted requirements.
+
+    Every requirement contributes to the denominator, including
+    ``not_mentioned`` items. That status means the CV provides no evidence
+    either way; it is not treated as proof that the candidate lacks the skill.
+    Required items count three times as much as preferred items.
+    """
+    assessed = deduplicate_requirements(requirements)
     if not assessed:
         return None
 

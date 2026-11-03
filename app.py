@@ -1,5 +1,6 @@
 import streamlit as st
 import json
+from html import escape
 from ai_engine import (
     analyse_cv_job_match,
     analyse_job_requirements,
@@ -10,6 +11,7 @@ from openai import APIConnectionError, AuthenticationError, APIError
 from skill_matching import (
     calculate_cv_match_score,
     calculate_weighted_match,
+    deduplicate_requirements,
     normalise_skill,
     normalise_skills,
 )
@@ -19,6 +21,132 @@ from jobs_api import search_jobs, filter_senior_jobs, filter_by_salary, filter_b
 from requests.exceptions import RequestException
 from job_comparison import find_best_job
 from sample_jobs import SAMPLE_JOBS
+
+st.set_page_config(
+    page_title="AI Job Assistant",
+    page_icon="🤖",
+    layout="wide",
+    initial_sidebar_state="collapsed",
+)
+
+THEMES = {
+    "Professional Light": {
+        "page": "#f8fbff",
+        "surface": "#ffffff",
+        "soft": "#eff6ff",
+        "text": "#172033",
+        "muted": "#475569",
+        "line": "#cbd5e1",
+        "input": "#ffffff",
+        "input_text": "#172033",
+        "brand": "#1d4ed8",
+        "brand_soft": "#dbeafe",
+        "button_text": "#ffffff",
+        "hero": "linear-gradient(135deg, #172554 0%, #1d4ed8 58%, #0284c7 140%)",
+        "badge": "#e8f0ff",
+        "badge_text": "#1e40af",
+    },
+    "Professional Dark": {
+        "page": "#0f172a",
+        "surface": "#1e293b",
+        "soft": "#172554",
+        "text": "#f8fafc",
+        "muted": "#cbd5e1",
+        "line": "#475569",
+        "input": "#111827",
+        "input_text": "#f8fafc",
+        "brand": "#93c5fd",
+        "brand_soft": "#1e3a8a",
+        "button_text": "#0f172a",
+        "hero": "linear-gradient(135deg, #172554 0%, #1d4ed8 58%, #0369a1 140%)",
+        "badge": "#1e3a8a",
+        "badge_text": "#dbeafe",
+    },
+    "Navy Blue": {
+        "page": "#081a2f",
+        "surface": "#102a4c",
+        "soft": "#12345d",
+        "text": "#f1f5f9",
+        "muted": "#d1d5db",
+        "line": "#416486",
+        "input": "#0b203b",
+        "input_text": "#f8fafc",
+        "brand": "#93c5fd",
+        "brand_soft": "#1e416b",
+        "button_text": "#071426",
+        "hero": "linear-gradient(135deg, #071426 0%, #123b6b 58%, #075985 140%)",
+        "badge": "#16416b",
+        "badge_text": "#dbeafe",
+    },
+}
+
+st.session_state.setdefault("theme_name", "Professional Light")
+selected_theme = st.sidebar.selectbox(
+    "Colour theme",
+    list(THEMES),
+    index=list(THEMES).index(st.session_state["theme_name"]),
+    key="theme_selector",
+    help="Choose a high-contrast colour palette for this session.",
+)
+st.session_state["theme_name"] = selected_theme
+theme = THEMES[selected_theme]
+
+
+st.markdown(
+    f"""
+    <style>
+    :root {{
+        --ink: {theme['text']};
+        --muted: {theme['muted']};
+        --brand: {theme['brand']};
+        --brand-dark: {theme['brand']};
+        --surface: {theme['surface']};
+        --soft: {theme['soft']};
+        --line: {theme['line']};
+        --input: {theme['input']};
+        --input-text: {theme['input_text']};
+    }}
+    .stApp {{ background: linear-gradient(180deg, {theme['page']} 0%, {theme['surface']} 46%); color: var(--ink); }}
+    [data-testid="stHeader"] {{ background: {theme['page']}ee; }}
+    [data-testid="stSidebar"] {{ background: {theme['surface']}; border-right: 1px solid var(--line); }}
+    .stApp p, .stApp li, .stApp label, [data-testid="stWidgetLabel"] p, [data-testid="stMarkdownContainer"] {{ color: var(--ink); }}
+    .stApp small, .stCaption, [data-testid="stCaptionContainer"] p {{ color: var(--muted) !important; }}
+    input, textarea, [data-baseweb="select"] > div, [data-testid="stNumberInput"] input {{
+        background-color: var(--input) !important; color: var(--input-text) !important;
+        border-color: var(--line) !important;
+    }}
+    input::placeholder, textarea::placeholder {{ color: var(--muted) !important; opacity: 1 !important; }}
+    [data-baseweb="select"] span, [data-baseweb="select"] input {{ color: var(--input-text) !important; }}
+    [data-baseweb="popover"] {{ background: var(--surface); }}
+    [data-baseweb="popover"] li {{ color: var(--ink) !important; }}
+    .stButton > button, .stDownloadButton > button {{ background: var(--brand); color: {theme['button_text']} !important; border: 1px solid var(--brand); }}
+    .stButton > button:hover, .stDownloadButton > button:hover {{ filter: brightness(1.08); }}
+    [data-testid="stAlert"] {{ background: var(--surface); color: var(--ink); border: 1px solid var(--line); }}
+    [data-testid="stExpander"] {{ background: var(--surface); border: 1px solid var(--line); }}
+    [data-testid="stExpander"] summary, [data-testid="stExpander"] summary p {{ color: var(--ink) !important; }}
+    .block-container {{ max-width: 1180px; padding-top: 2rem; padding-bottom: 4rem; }}
+    h1, h2, h3 {{ color: var(--ink); letter-spacing: -0.02em; }}
+    h1 {{ font-size: clamp(2rem, 5vw, 3.25rem) !important; margin-bottom: 0.25rem; }}
+    h2 {{ margin-top: 1.5rem; }}
+    .hero {{ background: {theme['hero']}; border-radius: 1.25rem; padding: 2rem 2.25rem; color: white; box-shadow: 0 16px 40px rgba(30, 64, 175, 0.24); margin-bottom: 1.5rem; }}
+    .hero h1 {{ color: white; margin: 0; }}
+    .hero p {{ color: #e0f2fe; font-size: 1.05rem; margin: 0.45rem 0 0; }}
+    .section-kicker {{ color: var(--brand-dark); font-size: 0.78rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; margin-top: 1.6rem; }}
+    .card {{ background: var(--surface); border: 1px solid var(--line); border-radius: 0.9rem; padding: 1.1rem 1.25rem; box-shadow: 0 5px 18px rgba(15, 23, 42, 0.12); }}
+    .muted {{ color: var(--muted) !important; }}
+    .skill-badge {{ display: inline-block; background: {theme['badge']}; color: {theme['badge_text']}; border: 1px solid var(--line); border-radius: 999px; padding: 0.28rem 0.68rem; margin: 0.16rem 0.2rem 0.16rem 0; font-size: 0.84rem; font-weight: 600; }}
+    .skill-badge.success {{ background: #14532d; color: #dcfce7; border-color: #4ade80; }}
+    .skill-badge.warning {{ background: #78350f; color: #fef3c7; border-color: #fbbf24; }}
+    .skill-badge.neutral {{ background: var(--soft); color: var(--ink); border-color: var(--line); }}
+    .file-status {{ background: var(--soft); border-left: 4px solid var(--brand); border-radius: 0.5rem; padding: 0.75rem 1rem; }}
+    @media (max-width: 640px) {{
+        .block-container {{ padding: 1rem 0.8rem 3rem; }}
+        .hero {{ padding: 1.4rem; border-radius: 0.9rem; }}
+    }}
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 
 def _job_company(job):
@@ -64,6 +192,21 @@ def _normalise_skills(skills):
     return normalise_skills(skills)
 
 
+def _skill_badges(skills, style=""):
+    """Render a compact, readable skill list without exposing raw list syntax."""
+    skills = [str(skill) for skill in skills if str(skill).strip()]
+    if not skills:
+        return '<span class="muted">None identified</span>'
+    return "".join(
+        f'<span class="skill-badge {style}">{escape(skill.title())}</span>'
+        for skill in skills
+    )
+
+
+def _job_label(job):
+    return f"{job.get('title', 'Unknown job')} · {_job_company(job)}"
+
+
 for key, default in {
     "cv_skills": [],
     "searched_jobs": [],
@@ -78,17 +221,22 @@ for key, default in {
 }.items():
     st.session_state.setdefault(key, default)
 
-st.title("AI Job Assistant V3")
-st.write("Welcome to your AI-powered career assistant!")
+st.markdown(
+    '<div class="hero"><h1>AI Job Assistant</h1>'
+    '<p>Turn your CV and the right opportunity into an evidence-led career plan.</p></div>',
+    unsafe_allow_html=True,
+)
 
-st.subheader("Upload Your CV")
+st.markdown('<div class="section-kicker">01 · Candidate profile</div>', unsafe_allow_html=True)
+st.header("Upload your CV", anchor=False)
+st.caption("Upload a readable PDF to automatically extract skills and unlock evidence-based matching.")
 uploaded_cv = st.file_uploader(
-    "Choose your CV (PDF only)",
-    type=["pdf"]
+    "Choose a CV (PDF only)",
+    type=["pdf"],
+    help="Your CV is used only for this session's matching workflow.",
 )
 
 if uploaded_cv is not None:
-    st.success("CV uploaded successfully!")
     try:
         cv_text = read_cv(uploaded_cv)
         uploaded_fingerprint = cv_fingerprint(uploaded_cv)
@@ -99,7 +247,13 @@ if uploaded_cv is not None:
             st.session_state["cv_skills_fingerprint"] = None
             st.session_state["cv_job_match"] = None
             st.session_state["cv_job_match_inputs"] = None
-        st.write("CV text extracted successfully!")
+            st.session_state["missing_skills"] = []
+            st.session_state["learning_plans"] = {}
+        st.markdown(
+            f'<div class="file-status"><strong>Analysing:</strong> {escape(uploaded_cv.name)}'
+            '<br><span class="muted">Readable CV text extracted successfully.</span></div>',
+            unsafe_allow_html=True,
+        )
     except ValueError as error:
         st.error(str(error))
         st.stop()
@@ -127,7 +281,10 @@ if uploaded_cv is not None:
 
         else:
             st.success("CV skills extracted automatically!")
-            st.write("Skills found in your CV:", cv_skills)
+            st.markdown(
+                f'<div class="card"><strong>Skills found in your CV</strong><br>{_skill_badges(cv_skills)}</div>',
+                unsafe_allow_html=True,
+            )
 else:
     st.session_state["cv_text"] = ""
     st.session_state["cv_fingerprint"] = None
@@ -135,6 +292,8 @@ else:
     st.session_state["cv_skills_fingerprint"] = None
     st.session_state["cv_job_match"] = None
     st.session_state["cv_job_match_inputs"] = None
+    st.session_state["missing_skills"] = []
+    st.session_state["learning_plans"] = {}
 
 cv_text = st.session_state.get("cv_text", "")
 
@@ -148,14 +307,20 @@ else:
     current_skills = _normalise_skills(st.session_state["cv_skills"])
 
 if current_skills:
-    st.write("Your skills:", current_skills)
+    source_label = "Skills used for matching" if user_skills.strip() else "Skills used from your CV"
+    st.markdown(
+        f'<div class="card"><strong>{source_label}</strong><br>{_skill_badges(current_skills)}</div>',
+        unsafe_allow_html=True,
+    )
 
 demo_mode = st.checkbox(
     "Demo Mode — Use sample jobs for testing",
     value=False
 )
 
-st.subheader("Search UK Tech Jobs")
+st.markdown('<div class="section-kicker">02 · Opportunity discovery</div>', unsafe_allow_html=True)
+st.header("Search UK tech jobs", anchor=False)
+st.caption("Filter for entry-level roles, then compare the opportunities that fit your goals.")
 job_category = st.selectbox(
     "Choose a technology career:",
     [
@@ -245,22 +410,21 @@ selected_job = None
 
 if demo_mode or st.session_state["searched_jobs"]:
     saved_jobs = SAMPLE_JOBS if demo_mode else st.session_state["searched_jobs"]
-    st.subheader("Your Saved Job Search Results")
+    st.markdown('<div class="section-kicker">03 · Shortlist</div>', unsafe_allow_html=True)
+    st.header("Saved job results", anchor=False)
+    st.caption(f"{len(saved_jobs)} opportunity(ies) ready for review and comparison.")
 
     for job in saved_jobs:
-        st.write(job.get("title", "Unknown job"))
+        with st.container(border=True):
+            st.subheader(_job_label(job), anchor=False)
+            job_meta = (
+                f"**Location:** {_job_location(job)}  ·  **Salary:** {_salary_text(job)}"
+            )
+            st.markdown(job_meta)
+            if job.get("redirect_url"):
+                st.link_button("View application", job["redirect_url"])
 
-        st.write("Company:", _job_company(job))
-
-        st.write("Location:", _job_location(job))
-
-        st.write("Salary:", _salary_text(job))
-
-        st.write("Apply here:", job.get("redirect_url", "No link available"))
-
-        st.divider()
-
-    st.subheader("Compare Jobs")
+    st.subheader("Compare shortlisted jobs", anchor=False)
 
     selected_comparison_jobs = st.multiselect(
         "Select jobs to compare:",
@@ -275,7 +439,7 @@ if demo_mode or st.session_state["searched_jobs"]:
 
     if selected_comparison_jobs:
         st.session_state["comparison_jobs"] = selected_comparison_jobs
-        st.success(f"{len(selected_comparison_jobs)} job(s) selected for comparison!")
+        st.success(f"{len(selected_comparison_jobs)} job(s) selected for comparison.")
 
         comparison_data = []
 
@@ -303,7 +467,10 @@ if demo_mode or st.session_state["searched_jobs"]:
                 st.warning("Please enter your skills or extract skills from your CV first.")
                 st.stop()
 
-            st.write("Skills being used for comparison:", current_skills)
+            st.markdown(
+                f'<div class="card"><strong>Skills used for comparison</strong><br>{_skill_badges(current_skills, "success")}</div>',
+                unsafe_allow_html=True,
+            )
 
             for job in selected_comparison_jobs:
                 job_description = job.get("description", "")
@@ -396,7 +563,7 @@ if demo_mode or st.session_state["searched_jobs"]:
     if st.session_state.get("comparison_inputs") != comparison_inputs:
         st.session_state["comparison_results"] = []
 
-    st.subheader("Skills Comparison Summary")
+    st.subheader("Comparison summary", anchor=False)
 
     summary_data = []
 
@@ -419,7 +586,7 @@ if demo_mode or st.session_state["searched_jobs"]:
     st.dataframe(summary_data, hide_index=True, width="stretch")
 
     if st.session_state.get("comparison_results"):
-        st.subheader("AI Skills Detected for Each Job")
+        st.subheader("Comparison details", anchor=False)
 
         for result in st.session_state["comparison_results"]:
             job = result["job"]
@@ -435,12 +602,19 @@ if demo_mode or st.session_state["searched_jobs"]:
 
             if match_score is not None:
                 st.write(f"Job Match Score: {match_score:.0f}%")
-                st.write("Matching skills:", matching_skills)
-                st.write("Missing skills:", missing_skills)
+                st.markdown(
+                    f'<strong>Matching skills</strong><br>{_skill_badges(matching_skills, "success")}',
+                    unsafe_allow_html=True,
+                )
+                st.markdown(
+                    f'<strong>Missing skills</strong><br>{_skill_badges(missing_skills, "warning")}',
+                    unsafe_allow_html=True,
+                )
 
 
             if detected_skills:
-                st.write("Required technical skills:", detected_skills)
+                with st.expander("View detected requirements"):
+                    st.markdown(_skill_badges(detected_skills), unsafe_allow_html=True)
             else:
                 st.warning(
                     "No explicit technical skills detected. "
@@ -482,12 +656,16 @@ if demo_mode or st.session_state["searched_jobs"]:
         if not selected_job_description:
             st.warning("This job has no description available to analyse.")
 
-st.subheader("Job Description Analyser")
+st.markdown('<div class="section-kicker">04 · Evidence-led matching</div>', unsafe_allow_html=True)
+st.header("CV-to-job matching", anchor=False)
+st.caption("Paste a description or select a saved role. The analysis uses only the current CV and job text.")
 
 job_description = st.text_area(
     "Paste a job description here:",
     value=selected_job_description,
-    key=f"job_description_{_job_key(selected_job) if selected_job is not None else 'manual'}"
+    key=f"job_description_{_job_key(selected_job) if selected_job is not None else 'manual'}",
+    height=220,
+    placeholder="Example: Junior AI Engineer requiring Python, Git, OpenAI APIs and prompt engineering...",
 )
 
 if st.button("Analyse CV against this job"):
@@ -499,9 +677,10 @@ if st.button("Analyse CV against this job"):
         try:
             with st.spinner("AI is comparing your CV with this job..."):
                 cv_job_match = analyse_cv_job_match(cv_text, job_description)
-                cv_job_match["score"] = calculate_cv_match_score(
+                cv_job_match["requirements"] = deduplicate_requirements(
                     cv_job_match["requirements"]
                 )
+                cv_job_match["score"] = calculate_cv_match_score(cv_job_match["requirements"])
                 cv_job_match["inputs"] = matching_inputs(cv_text, job_description)
                 st.session_state["cv_job_match"] = cv_job_match
                 st.session_state["cv_job_match_inputs"] = cv_job_match["inputs"]
@@ -523,24 +702,46 @@ cv_job_match = st.session_state.get("cv_job_match")
 if cv_job_match and cached_match_is_current(
     st.session_state.get("cv_job_match_inputs"), cv_text, job_description
 ):
-    st.subheader("CV-to-Job Match")
+    st.markdown('<div class="section-kicker">05 · Saved analysis</div>', unsafe_allow_html=True)
+    st.header("Your match report", anchor=False)
     st.caption(
-        "This is an AI-assisted heuristic based only on the job details and CV text provided. "
-        "It is not a scientifically calibrated probability of getting hired. "
-        "Requirements not mentioned in the CV are not counted as gaps."
+        "This is an AI-assisted heuristic based only on the supplied CV and job description. "
+        "It is an estimate of requirement alignment, not a probability of being hired. "
+        "Requirements not evidenced in the CV are shown separately from potential gaps."
     )
 
     score = cv_job_match.get("score")
     if score is None:
         st.info("There is not enough explicit CV evidence to calculate a reliable heuristic score.")
     else:
-        st.metric("Heuristic CV match", f"{score:.0f}%")
+        requirements = deduplicate_requirements(cv_job_match.get("requirements", []))
+        matched_count = sum(item["status"] == "matched" for item in requirements)
+        requirement_count = len(requirements)
+        score_col, evidence_col, scope_col = st.columns(3)
+        score_col.metric("CV requirement coverage", f"{score:.0f}%")
+        evidence_col.metric("Supported requirements", f"{matched_count}/{requirement_count}")
+        scope_col.metric("CV analysed", uploaded_cv.name if uploaded_cv is not None else "Current CV")
 
-    requirements = cv_job_match.get("requirements", [])
+    requirements = deduplicate_requirements(cv_job_match.get("requirements", []))
+    requirement_rows = [
+        {
+            "Requirement": item["requirement"],
+            "Importance": item["importance"].title(),
+            "Evidence status": {
+                "matched": "Supported",
+                "gap": "Potential gap",
+                "not_mentioned": "Not evidenced",
+            }[item["status"]],
+        }
+        for item in requirements
+    ]
+    if requirement_rows:
+        st.dataframe(requirement_rows, hide_index=True, width="stretch")
+
     status_groups = (
         ("matched", "Supported by your CV", "success"),
         ("gap", "Potential gaps", "warning"),
-        ("not_mentioned", "Not mentioned in your CV", "info"),
+        ("not_mentioned", "Not evidenced in your CV", "info"),
     )
     for status, heading, message_type in status_groups:
         items = [item for item in requirements if item["status"] == status]
@@ -553,14 +754,18 @@ if cv_job_match and cached_match_is_current(
                 st.write(item["explanation"])
                 if item["evidence"]:
                     st.caption(f"CV evidence: {item['evidence']}")
+                elif status == "not_mentioned":
+                    st.caption("No supporting statement was found in the uploaded CV.")
 
     suggestions = cv_job_match.get("suggestions", [])
     if suggestions:
-        st.markdown("**Personalised CV improvements**")
+        st.subheader("Personalised next steps", anchor=False)
         for suggestion in suggestions:
-            st.write(f"- {suggestion}")
+            st.info(suggestion)
 
 if st.session_state.get("missing_skills"):
+    st.subheader("Learning plans", anchor=False)
+    st.caption("Optional plans for requirements explicitly identified as potential gaps.")
     generate_plans = st.checkbox("Generate learning plans for missing skills")
 
     if generate_plans:
@@ -575,5 +780,5 @@ if st.session_state.get("missing_skills"):
                     st.error(f"Unable to generate a learning plan for {skill}.")
 
     for skill, plan in st.session_state.get("learning_plans", {}).items():
-        st.subheader(f"{skill.title()} Learning Plan")
-        st.write(plan)
+        with st.expander(f"{skill.title()} learning plan"):
+            st.write(plan)

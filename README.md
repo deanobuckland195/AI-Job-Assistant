@@ -1,4 +1,4 @@
-# AI Job Assistant V3
+# AI Job Assistant
 
 An AI-powered Python application that helps users explore UK technology jobs, analyse job descriptions, and identify skills they need to develop.
 
@@ -25,6 +25,10 @@ An AI-powered Python application that helps users explore UK technology jobs, an
 - Clear distinction between supported evidence, evidenced gaps and requirements not mentioned in the CV
 - Personalised, evidence-safe CV improvement suggestions for a selected job
 - Transparent heuristic scoring; not a scientifically calibrated hiring probability
+- Portfolio-ready responsive Streamlit dashboard with a consistent visual design
+- Readable job cards, comparison tables, skill badges and expandable evidence explanations
+- Clear workflow sections for CV upload, job discovery, matching, analysis and saved results
+- Session theme selector with Professional Light, Professional Dark and Navy Blue high-contrast palettes
 - Automatic CV skill extraction immediately after a readable upload; no separate extraction click is required
 - Current-input protection: matching is only shown for the active uploaded CV and current job description
 - Equivalent explicit skill wording is normalised (for example, a Python application using the OpenAI API supports Python and OpenAI API)
@@ -38,8 +42,8 @@ Python, Streamlit, OpenAI API, Adzuna API, pytest and Git.
 Clone the repository and open the project folder:
 
 ```bash
-git clone https://github.com/deanobuckland195/AIJobAssistantV3.git
-cd AIJobAssistantV3
+git clone https://github.com/<your-github-username>/AI-Job-Assistant.git
+cd AI-Job-Assistant
 ```
 
 Create and activate a Python virtual environment:
@@ -97,7 +101,11 @@ After uploading a readable PDF CV and selecting or pasting a job description, CV
 
 The app does not log CV text or API keys. Suggestions are framed as ways to clarify or strengthen evidence already present in the CV and must not invent achievements or qualifications.
 
-The score is a transparent estimate based on explicit evidence in the supplied CV and job description. It is not a hiring probability. A requirement that is not mentioned in the CV is shown separately from a potential gap and is not silently counted as a failure. Matching is unavailable until a readable CV has been uploaded.
+The **CV requirement coverage** number is a transparent coverage measure: all unique extracted requirements are included in its denominator, while only requirements supported by explicit CV evidence contribute to the numerator. It is not a hiring probability. A requirement that is not mentioned in the CV is shown separately from a potential gap and is not silently counted as a failure. Matching is unavailable until a readable CV has been uploaded.
+
+## Interface
+
+The Streamlit dashboard is organised into five steps: candidate profile and CV upload, opportunity discovery, saved job results, evidence-led CV-to-job matching, and the saved match report. The interface uses responsive styling, readable cards and tables, skill badges, expandable evidence details and clear success, warning and error messages. The uploaded filename is shown while the current CV is being analysed. A session-level **Colour theme** selector in the sidebar provides Professional Light, Professional Dark and Navy Blue palettes, with accessible contrast applied across page content, inputs, buttons, cards, alerts and expanders.
 
 ## Existing matching features
 

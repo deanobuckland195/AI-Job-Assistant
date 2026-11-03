@@ -61,21 +61,31 @@ def test_cv_job_match_preserves_evidence_states_and_deduplicates_suggestions():
     assert create.call_count == 1
 
 
-def test_cv_match_score_excludes_not_mentioned_requirements():
+@pytest.mark.parametrize(
+    ("matched", "total", "expected"),
+    [(4, 8, 50), (0, 8, 0), (8, 8, 100)],
+)
+def test_cv_match_score_uses_all_requirements_in_coverage(matched, total, expected):
     requirements = [
-        {"status": "matched", "importance": "required"},
-        {"status": "gap", "importance": "required"},
-        {"status": "not_mentioned", "importance": "required"},
-        {"status": "matched", "importance": "preferred"},
+        {"requirement": f"Skill {index}", "status": "matched" if index < matched else "not_mentioned", "importance": "required"}
+        for index in range(total)
     ]
 
-    assert calculate_cv_match_score(requirements) == pytest.approx(57.142857)
+    assert calculate_cv_match_score(requirements) == pytest.approx(expected)
 
 
-def test_cv_match_score_is_unavailable_without_explicit_evidence():
-    assert calculate_cv_match_score([
-        {"status": "not_mentioned", "importance": "required"}
-    ]) is None
+def test_cv_match_score_is_unavailable_for_empty_requirements():
+    assert calculate_cv_match_score([]) is None
+
+
+def test_cv_match_score_does_not_double_count_duplicate_requirements():
+    requirements = [
+        {"requirement": "Python", "status": "matched", "importance": "required"},
+        {"requirement": " python ", "status": "not_mentioned", "importance": "required"},
+        {"requirement": "SQL", "status": "not_mentioned", "importance": "required"},
+    ]
+
+    assert calculate_cv_match_score(requirements) == pytest.approx(50)
 
 
 def test_cv_job_match_rejects_invalid_response():
