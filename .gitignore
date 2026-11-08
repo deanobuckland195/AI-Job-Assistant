@@ -1,0 +1,87 @@
+# Python environments and generated files
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+*.egg-info/
+build/
+dist/
+
+# Local reports and user data (ignore rules do not untrack existing entries)
+job_analysis*.txt
+.job_analysis*.tmp
+.cv-analysis-*.tmp
+cv_analysis*.txt
+job_comparison*.txt
+applications*.json
+local_data/
+*.sqlite
+*.sqlite3
+*.db
+*-journal
+*-wal
+*-shm
+*.log
+
+# Credentials: keep examples safe to share
+.env
+.env.*
+!.env.example
+secrets/
+.streamlit/secrets.toml
+credentials*.json
+*.pem
+*.key
+
+# Editor and operating system files
+.idea/
+.vscode/
+.DS_Store
+
+# Historical local script backups: keep on disk, omit from public source
+main_backup.py
+main_stage15_backup.py
+main_stage15_backup
+*.bak
+*.backup
+*~
+
+# Personal documents and local credential stores (synthetic fixtures use code)
+*.pdf
+*.docx
+*.doc
+*.odt
+*.rtf
+cv*.txt
+resume*.txt
+cover_letter*.txt
+private_data/
+private/
+uploads/
+.aws/
+.ssh/
+.netrc
+.pypirc
+id_rsa*
+id_ed25519*
+*.p12
+*.pfx
+
+# Plain-text CVs/job descriptions, tabular exports and credential JSON can have arbitrary names.
+# Only dependency lists and reviewed synthetic fixtures are public exceptions.
+*.txt
+!requirements*.txt
+!tests/fixtures/**/*.txt
+*.csv
+*.tsv
+*.xls
+*.xlsx
+*.json
+!tests/fixtures/*.json

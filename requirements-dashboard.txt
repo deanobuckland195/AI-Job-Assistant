@@ -1,0 +1,5 @@
+-r requirements.txt
+# Supported/tested UI baseline; 1.54 has failing interaction checks and caps Pillow below its fixes.
+streamlit>=1.67.0,<2
+# Direct floor prevents an already-installed vulnerable Pillow from satisfying Streamlit's broad range.
+pillow>=13.0.0,<14
