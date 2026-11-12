@@ -2,38 +2,40 @@
 
 DARK_STYLE = """<style>
 :root {
- --ai-bg:#090f20; --ai-panel:#1b162d; --ai-border:#795399;
+ --ai-bg:#070619; --ai-panel:#120e2b; --ai-border:#594078;
  --ai-text:#faf5ff; --ai-muted:#d5bfe7; --ai-accent:#d3a1ff;
 }
-.stApp {
- color-scheme:dark; color:var(--ai-text); background-color:var(--ai-bg);
- background-image:radial-gradient(ellipse at 18% 0%,#25457324,transparent 50%),
- radial-gradient(ellipse at 100% 50%,#1b365d18,transparent 50%),
- linear-gradient(135deg,#090f20,#0c1428 60%,#101b32);
+/* Paint the visible page shell, not just the outer Streamlit root. */
+.stApp, [data-testid="stAppViewContainer"] {
+ color-scheme:dark; color:var(--ai-text); background:var(--ai-bg)!important;
 }
+/* Structural layers must expose the canvas; card/widget surfaces stay intact. */
+[data-testid="stMain"], [data-testid="stAppScrollToBottomContainer"],
+[data-testid="stMainBlockContainer"] {background:transparent!important}
 [data-testid="stHeader"] {
- background:linear-gradient(100deg,#0d162c,#14213b); border-bottom:1px solid #4f366b;
+ background:linear-gradient(100deg,#070619,#0b0820)!important; border-bottom:1px solid #4f366b;
 }
-[data-testid="stMainBlockContainer"] {max-width:1580px; padding:5rem 2.5rem 3rem}
-[data-testid="stSidebar"] {background:linear-gradient(180deg,#111c34,#0b1226 65%); border-right:1px solid #563974}
-.st-key-brand {border-bottom:1px solid #70448b; padding-bottom:1.1rem; margin-bottom:.6rem}
-.st-key-brand h1 {font-size:1.45rem; letter-spacing:-.045em; font-weight:700}
+[data-testid="stMainBlockContainer"] {max-width:1580px; padding:4.5rem 2rem 3rem}
+[data-testid="stSidebar"] {background:#100d2c!important; border-right:1px solid #302644}
+[data-testid="stSidebarContent"], [data-testid="stSidebarHeader"] {background:transparent!important}
+.st-key-brand {border-bottom:1px solid #70448b; padding-bottom:1rem; margin-bottom:.5rem}
+.st-key-brand h1 {font-size:1.2rem; letter-spacing:-.035em; font-weight:700}
 .st-key-brand h1::before {content:""; display:inline-block; width:.65em; height:.65em; margin-right:.55em;
- border-radius:4px; background:linear-gradient(135deg,#b594ff,#79baff)}
+ border-radius:4px; background:linear-gradient(135deg,#9b5cff,#cf3ca6)}
 .st-key-brand [data-testid="stCaptionContainer"] {font-size:.68rem; letter-spacing:.12em}
 [data-testid="stSidebar"] [role="radiogroup"] {gap:.35rem}
 [data-testid="stSidebar"] [role="radiogroup"] > div {width:100%}
 [data-testid="stSidebar"] [role="radiogroup"] label {position:relative; display:flex!important;
  flex-direction:row!important; align-items:center; width:100%!important; box-sizing:border-box;
- padding:.85rem .8rem .85rem 2.7rem; min-height:54px; gap:.65rem; border:1px solid transparent; border-radius:12px}
+ padding:.55rem .75rem .55rem 2.5rem; min-height:44px; gap:.65rem; border:1px solid transparent; border-radius:12px}
 [data-testid="stSidebar"] [role="radiogroup"] label::before {content:"▦"; position:absolute; left:.85rem;
  top:50%; transform:translateY(-50%); line-height:1; font-size:1.25rem; color:#c8a9ff}
 [data-testid="stSidebar"] label:has(input[value="1"])::before {content:"⊕"}
 [data-testid="stSidebar"] label:has(input[value="2"])::before {content:"◇"}
 [data-testid="stSidebar"] label:has(input[value="3"])::before {content:"◈"}
-[data-testid="stSidebar"] [role="radiogroup"] label:hover {background:#38244f}
+[data-testid="stSidebar"] [role="radiogroup"] label:hover {background:#1b143c}
 [data-testid="stSidebar"] [role="radiogroup"] label:has(input:checked) {border-color:#986ecc;
- border-left:4px solid #b189ff; background:linear-gradient(110deg,#503078,#35224d)}
+ border-left:4px solid #b189ff; background:linear-gradient(110deg,#291851,#211540)}
 [data-testid="stSidebar"] label:has(input:focus-visible) {outline:3px solid #e4b5ff; outline-offset:3px}
 h1,h2,h3,h4,h5 {color:var(--ai-text); letter-spacing:-.035em; overflow-wrap:anywhere}
 h2 {font-size:clamp(1.7rem,3vw,2.4rem); font-weight:700}
@@ -45,9 +47,15 @@ h3 {font-size:1.3rem; font-weight:650}
 a {color:#e7bbff}
 a:visited {color:#d6bdff}
 hr {border-color:#583d70}
-.st-key-workspace_bar {border-bottom:1px solid #51336c; padding:.2rem 0 .7rem; margin-bottom:.6rem}
-.st-key-workspace_bar [data-testid="stCaptionContainer"] {letter-spacing:.12em; font-size:.72rem}
-.st-key-workspace_bar [data-testid="stText"] {font-size:1rem; color:var(--ai-muted)}
+.st-key-dashboard_hero {padding:2.2rem 2.4rem; margin-bottom:.8rem;
+ border:1px solid #51326e; border-radius:24px;
+ background:radial-gradient(ellipse at 0% 0%,#6b2ba522,transparent 65%),
+ linear-gradient(115deg,#160d30,#130b21); box-shadow:inset 0 1px 0 #b77aff0a}
+.st-key-dashboard_hero h1 {font-size:clamp(1.8rem,3.2vw,2.6rem); line-height:1.2;
+ color:var(--ai-text); letter-spacing:-.04em; padding:.2rem 0 .4rem}
+.st-key-dashboard_hero [data-testid="stCaptionContainer"] {font-size:1rem; max-width:760px}
+.st-key-hero_actions {margin-top:.6rem; max-width:920px}
+.st-key-hero_actions [data-testid="stColumn"] {min-width:0}
 .st-key-page_intro {padding:0 0 1.3rem; margin-bottom:.3rem}
 .st-key-page_intro h1 {font-size:clamp(2rem,3.7vw,3.25rem); line-height:1.15; letter-spacing:-.04em;
  width:fit-content; max-width:100%; background:linear-gradient(100deg,#eadcff,#b49aff 55%,#79baff);
@@ -61,14 +69,14 @@ hr {border-color:#583d70}
 [data-testid="stExpander"] summary:hover {background:#38244f; border-radius:12px}
 [data-testid="stButton"] button, [data-testid="stFormSubmitButton"] button {
  min-height:48px; padding:.55rem 1.1rem; border-radius:12px; border:1px solid #965eaf;
- background:#482665; color:var(--ai-text); font-weight:550; transition:background-color .12s ease}
+ background:#261443; color:var(--ai-text); font-weight:550; transition:background-color .12s ease}
 [data-testid="stButton"] button:hover, [data-testid="stFormSubmitButton"] button:hover {
- border-color:#d3a1ff; background:#67368a; color:#fff}
+ border-color:#d3a1ff; background:#3d205e; color:#fff}
 button[kind^="primary"], [data-testid="stBaseButton-primary"] {
- background:linear-gradient(110deg,#773cf0,#9549e9)!important;
+ background:linear-gradient(110deg,#7b2de2,#b52a8d)!important;
  border:1px solid #db94f5!important; color:#fff!important; box-shadow:0 4px 14px #773cf033}
 button[kind^="primary"]:hover, [data-testid="stBaseButton-primary"]:hover {
- background:linear-gradient(110deg,#6630cf,#7e36c7)!important}
+ background:linear-gradient(110deg,#6823c3,#982277)!important}
 button:disabled {opacity:1!important; background:#352841!important; color:#d4c1e0!important;
  border-color:#8d719e!important; box-shadow:none!important; cursor:not-allowed}
 button:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus-visible,
@@ -120,18 +128,23 @@ input:disabled::placeholder, textarea:disabled::placeholder {color:#cdb5dd!impor
 [role="tablist"] {border-bottom:1px solid #70448b; gap:1.2rem}
 [role="tab"] {color:var(--ai-muted)}
 [role="tab"][aria-selected="true"] {color:#ead0ff}
-[data-testid="stMetric"] {min-width:0; min-height:8rem; padding:1.1rem; border:1px solid #75519b;
- border-radius:18px; background:linear-gradient(125deg,#342249,#241a37)}
+[data-testid="stMetric"] {min-width:0; min-height:8rem; padding:1.1rem; border:1px solid #493467;
+ border-radius:20px; background:linear-gradient(125deg,#151030,#100d28)}
 [data-testid="stMetricLabel"] p {color:var(--ai-muted); white-space:normal; line-height:1.5}
 [data-testid="stMetricValue"] {font-variant-numeric:tabular-nums; letter-spacing:-.045em; color:var(--ai-text)}
 [data-testid="stMetricValue"] > div {font-size:clamp(1.4rem,2.3vw,2rem); white-space:normal; overflow-wrap:anywhere}
-.st-key-overview {margin:.4rem 0 1rem}
-.st-key-application_listing {padding:1.4rem; background:#171225; border:1px solid #5f3e7c; border-radius:22px}
+.st-key-overview {margin:0 0 .4rem}
+.st-key-overview [data-testid="stHorizontalBlock"] {flex-wrap:wrap; gap:1rem}
+.st-key-overview [data-testid="stColumn"] {flex:0 0 calc((100% - 2rem) / 3)!important; min-width:0}
+.st-key-overview [data-testid="stMetric"] {min-height:8.5rem; padding:1.25rem 1.4rem}
+.st-key-overview [data-testid="stMetricLabel"] p {font-size:.8rem; letter-spacing:.07em; text-transform:uppercase}
+.st-key-overview [data-testid="stMetricValue"] > div {font-size:2.1rem; font-weight:650}
+.st-key-application_listing {padding:1.4rem; background:transparent; border:1px solid #493467; border-radius:22px}
 .st-key-application_summary {padding:1.1rem; background:#1c152e; border:1px solid #634283; border-radius:20px}
 .st-key-application_summary [data-testid="stMetric"] {min-height:0; padding:.9rem}
 [class*="st-key-application_card_"], .st-key-interview_question_card, .st-key-interview_answer_card,
 [class*="st-key-saved_milestone_card_"], [class*="st-key-preview_milestone_card_"] {
- padding:1.2rem; background:linear-gradient(145deg,#2b203d,#1c172e); border:1px solid #795399; border-radius:20px}
+ padding:1.2rem; background:linear-gradient(145deg,#1b1235,#130f29); border:1px solid #795399; border-radius:20px}
 [class*="st-key-saved_milestone_card_"], [class*="st-key-preview_milestone_card_"] {border-top:3px solid #a97dff}
 [class*="st-key-saved_milestone_title_"] [data-testid="stText"],
 [class*="st-key-preview_milestone_title_"] [data-testid="stText"] {font-size:1.3rem; font-weight:650; letter-spacing:-.02em}
@@ -171,6 +184,11 @@ input:disabled::placeholder, textarea:disabled::placeholder {color:#cdb5dd!impor
  .st-key-roadmap_studio [data-testid="stHorizontalBlock"] {flex-wrap:wrap}
  .st-key-roadmap_studio [data-testid="stColumn"] {flex:1 1 100%!important; min-width:0}
 }
+@media(max-width:800px) {
+ .st-key-hero_actions [data-testid="stHorizontalBlock"] {flex-wrap:wrap}
+ .st-key-hero_actions [data-testid="stColumn"] {flex:1 1 100%!important}
+ .st-key-hero_actions [data-testid="stColumn"]:last-child {display:none}
+}
 @media(max-width:640px) {
  [data-testid="stMainBlockContainer"] {padding:5rem 1rem 2rem}
  [data-testid="stMain"] [data-testid="stHorizontalBlock"] {flex-wrap:wrap}
@@ -178,6 +196,8 @@ input:disabled::placeholder, textarea:disabled::placeholder {color:#cdb5dd!impor
  .st-key-overview [data-testid="stColumn"] {flex:1 1 calc(50% - 1rem)!important}
  [data-testid="stForm"], .st-key-application_listing, .st-key-roadmap_guide {padding:1rem}
  .st-key-page_intro {padding-bottom:1rem}
+ .st-key-dashboard_hero {padding:1.4rem; border-radius:20px}
+ .st-key-overview [data-testid="stMetric"] {padding:1rem; min-height:7.5rem}
  [data-testid="stMetric"] {padding:.8rem}
 }
 @media(prefers-reduced-motion:reduce) {

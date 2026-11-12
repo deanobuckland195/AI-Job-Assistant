@@ -14,7 +14,12 @@ showErrorDetails = "none"
 [theme]
 base = "dark"
 primaryColor = "#D3A1FF"
-backgroundColor = "#090F20"
+backgroundColor = "#070619"
 secondaryBackgroundColor = "#1B162D"
 textColor = "#FAF5FF"
 font = "sans serif"
+
+# Match the reference sidebar independently of the purple card/input surfaces.
+[theme.sidebar]
+backgroundColor = "#100D2C"
+secondaryBackgroundColor = "#1B162D"

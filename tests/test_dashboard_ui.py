@@ -231,3 +231,40 @@ def test_card_management_opens_existing_record_without_writing(dashboard):
     assert at.text_input(key="edit_1_1_company").value == "Synthetic Ltd"
     with storage.database(path) as connection:
         assert list(connection.iterdump()) == before
+
+
+@pytest.mark.parametrize("key, route, form_label", [
+    ("hero_add_application", "Add application", "Company *"),
+    ("hero_interview_practice", "Interview Practice", "Session title"),
+])
+def test_hero_actions_open_existing_workflows_without_writing(dashboard, key, route, form_label):
+    path, at = dashboard
+    seed(path)
+    with storage.database(path) as connection:
+        before = list(connection.iterdump())
+    at.run()
+    assert any(t.value == "Your career, moving forward." for t in at.title)
+    at.button(key=key).click().run()
+    assert not at.exception
+    assert at.radio(key="workspace").value == route
+    assert any(field.label == form_label for field in at.text_input)
+    with storage.database(path) as connection:
+        assert list(connection.iterdump()) == before
+
+
+def test_dashboard_overview_uses_saved_status_counts_and_is_read_only(dashboard):
+    path, at = dashboard
+    for status in ("saved", "applied", "interviewing", "offered", "rejected", "withdrawn"):
+        seed(path, status=status)
+    with storage.database(path) as connection:
+        before = list(connection.iterdump())
+    at.run()
+    assert not at.exception
+    assert {m.label: m.value for m in at.metric} == {
+        "Total applications": "6", "Saved jobs": "1", "Active applications": "3",
+        "Interviews": "1", "Offers": "1",
+    }
+    assert {tab.label for tab in at.tabs} >= {"Application cards", "Table view"}
+    assert any(field.label == "Search applications" for field in at.text_input)
+    with storage.database(path) as connection:
+        assert list(connection.iterdump()) == before

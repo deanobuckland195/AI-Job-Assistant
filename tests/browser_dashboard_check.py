@@ -12,7 +12,6 @@ from pathlib import Path
 import socket
 import sqlite3
 import subprocess
-import sys
 import tempfile
 import time
 from urllib.request import urlopen
@@ -96,8 +95,11 @@ else:
                                 expect(page.get_by_role('heading', name=heading, exact=True)).to_be_visible()
                                 if width <= 768:
                                     page.get_by_role('button', name='Collapse sidebar', exact=True).click()
-                                expect(page.get_by_test_id('stApp')).to_have_css('background-color','rgb(9, 15, 32)')
-                                assert 'linear-gradient' in page.get_by_test_id('stApp').evaluate('el=>getComputedStyle(el).backgroundImage')
+                                expect(page.get_by_test_id('stApp')).to_have_css('background-color','rgb(7, 6, 25)')
+                                expect(page.get_by_test_id('stApp')).to_have_css('background-image','none')
+                                expect(page.get_by_test_id('stAppViewContainer')).to_have_css('background-color','rgb(7, 6, 25)')
+                                expect(sidebar).to_have_css('background-color','rgb(16, 13, 44)')
+                                expect(page.get_by_test_id('stMain')).to_have_css('background-color','rgba(0, 0, 0, 0)')
                                 assert 'linear-gradient' in page.get_by_test_id('stHeader').evaluate('el=>getComputedStyle(el).backgroundImage')
                                 # Every visible native control is outlined before focus.
                                 roots = page.locator('[data-testid="stTextInputRootElement"], [data-testid="stTextAreaRootElement"], [data-testid="stNumberInputContainer"], .stSelectbox [role="group"], .stMultiSelect div[role="group"], [data-testid="stDateInputField"]')
@@ -123,6 +125,20 @@ else:
                                     expect(page.get_by_role('dialog')).to_be_visible()
                                     page.keyboard.press('Escape')
                                 if route == 'Applications':
+                                    expect(page.get_by_role('heading',name='Your career, moving forward.',exact=True)).to_be_visible()
+                                    hero = page.locator('.st-key-dashboard_hero')
+                                    expect(hero).to_have_css('background-image', re.compile('linear-gradient'))
+                                    add_action = hero.get_by_role('button',name='Add application',exact=True)
+                                    add_action.focus()
+                                    add_action.press('Enter')
+                                    expect(page.get_by_role('heading',name='New application',exact=True)).to_be_visible()
+                                    # Returning through the native sidebar preserves the same existing route.
+                                    if not sidebar.bounding_box() or sidebar.bounding_box()['x'] < 0:
+                                        page.get_by_role('button',name='Expand sidebar',exact=True).click()
+                                    sidebar.get_by_text('Applications',exact=True).click()
+                                    if width <= 768:
+                                        page.get_by_role('button',name='Collapse sidebar',exact=True).click()
+                                    expect(page.locator('.st-key-application_listing')).to_have_css('background-color','rgba(0, 0, 0, 0)')
                                     search = page.get_by_role('textbox',name='Search applications',exact=True)
                                     assert search.evaluate("el=>getComputedStyle(el,'::placeholder').color") == 'rgb(219, 197, 233)'
                                     expect(page.locator('.st-key-application_grid')).to_contain_text('Synthetic Robotics')
@@ -159,7 +175,7 @@ else:
                                     page.locator('.st-key-saved_milestone_grid').screenshot(path=str(artifacts / f'milestone-cards-{width}.png'))
                                 if route == 'Interview Practice':
                                     page.locator('.st-key-interview_workspace').screenshot(path=str(artifacts / f'interview-question-{width}.png'))
-                                page.locator('.st-key-page_intro').click()
+                                page.locator('.st-key-dashboard_hero' if route == 'Applications' else '.st-key-page_intro').click()
                                 page.get_by_test_id('stMain').evaluate('el=>el.scrollTop=0')
                                 page.screenshot(path=str(artifacts / f'{route.lower().replace(" ","-")}-{width}.png'),full_page=True)
                             assert not errors, errors

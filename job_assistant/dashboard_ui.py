@@ -21,6 +21,11 @@ def flash(message):
     st.rerun()
 
 
+def navigate_workspace(view):
+    """Use the existing sidebar route before Streamlit renders its widget."""
+    st.session_state["workspace"] = view
+
+
 def date_widget(label, value, key, help=DATE_HELP):
     valid = apps.iso_date(value, label)
     initial = date.fromisoformat(valid) if valid else None
@@ -265,15 +270,23 @@ def run():
         "Interview Practice": "Practise, review evidence and save an attempt. Offline feedback is always available.",
         "Skills Roadmap": "Plan manageable weekly learning and record honest evidence of progress.",
     }
-    with st.container(key="workspace_bar"):
-        location, welcome = st.columns([1.5, 1])
-        location.caption("AI JOB ASSISTANT  /  " + view.upper())
-        welcome.text("Your next chapter starts here.")
-    titles = {"Applications": "Your Career Dashboard", "Add application": "Add Your Next Opportunity",
+    titles = {"Add application": "Add Your Next Opportunity",
               "Interview Practice": "Prepare for Your Next Interview", "Skills Roadmap": "Build Your Career Roadmap"}
-    with st.container(key="page_intro"):
-        st.title(titles[view])
-        st.caption(descriptions[view])
+    if view == "Applications":
+        with st.container(key="dashboard_hero"):
+            st.caption("AI JOB ASSISTANT / YOUR CAREER WORKSPACE")
+            st.title("Your career, moving forward.")
+            st.caption("Keep your applications organised. Prepare with purpose. Take your next step.")
+            with st.container(key="hero_actions"):
+                add_action, practice_action, _ = st.columns([1, 1, 2], gap="small")
+                add_action.button("Add application", key="hero_add_application", type="primary",
+                                  on_click=navigate_workspace, args=("Add application",), width="stretch")
+                practice_action.button("Interview Practice", key="hero_interview_practice",
+                                       on_click=navigate_workspace, args=("Interview Practice",), width="stretch")
+    else:
+        with st.container(key="page_intro"):
+            st.title(titles[view])
+            st.caption(descriptions[view])
     if "notice" in st.session_state:
         st.success(st.session_state.pop("notice"))
     try:
@@ -300,6 +313,7 @@ def run():
                     st.metric(label, value)
                 st.caption("All saved records. Active includes interviews and offers.")
         else:
+            st.caption("OVERVIEW")
             with st.container(key="overview"):
                 for column, (label, value) in zip(st.columns(5), counts.items()):
                     with column:

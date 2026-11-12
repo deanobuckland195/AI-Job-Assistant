@@ -703,10 +703,13 @@ Local binding is not encryption or protection against other users of your device
 `.streamlit/secrets.toml` is ignored by Git; no Streamlit secrets are required or read
 by this application. Tests and smoke checks use temporary synthetic databases only.
 
-### Midnight Navy appearance and Safari preview
+### Career dashboard appearance and Safari preview
 
-The career workspace uses a large page title, a persistent navigation sidebar with
-route icons and clear section panels. Applications offers card and table tabs;
+The dashboard opens with a rounded purple-gradient hero, “Your career, moving forward.”,
+with actions that open the existing application form and interview practice page.
+Five saved-record statistics wrap into a compact responsive grid. The workspace
+keeps a compact indigo sidebar with route icons and clear section panels.
+Applications offers card and table tabs;
 Add Application separates the main form from a summary rail. Interview Practice
 places the question beside the response editor and shows STAR feedback in cards.
 Skills Roadmap groups career-goal and study-budget controls in two columns, then
@@ -714,7 +717,7 @@ shows real saved or previewed weekly milestones as responsive cards. Comparison
 context and roadmap title settings remain available in labelled expanders. Cards
 show existing values only; there are no salary estimates or invented outcomes.
 
-All workspace pages share a Midnight Navy background (#090F20) with subtle navy gradients, violet accents,
+All workspace pages share a reference-matched deep indigo background (#070619) with a deep indigo sidebar (#100D2C), a subtle header gradient, violet accents,
 rounded cards and responsive layouts. Form controls have persistent lavender
 borders, readable placeholders and brighter focus indicators. Disabled fields
 retain readable text. Native tables retain their scrolling and toolbar controls.
