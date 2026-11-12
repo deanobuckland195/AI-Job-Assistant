@@ -23,6 +23,7 @@ job_assistant/dashboard_feedback.py
 job_assistant/dashboard_launcher.py
 job_assistant/dashboard_logic.py
 job_assistant/dashboard_ui.py
+job_assistant/dashboard_theme.py
 job_assistant/documents.py
 job_assistant/extraction_worker.py
 job_assistant/interview_cli.py
@@ -49,6 +50,7 @@ pytest.ini
 requirements-dashboard.txt
 requirements-dev.txt
 requirements.txt
+tests/browser_dashboard_check.py
 tests/conftest.py
 tests/fixtures/job_matching_cases.json
 tests/test_ai_job_cli.py

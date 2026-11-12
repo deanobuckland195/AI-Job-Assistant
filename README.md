@@ -695,13 +695,56 @@ the repository root, specify the local binding and telemetry preference explicit
 python -m streamlit run dashboard.py --server.address=127.0.0.1 --browser.gatherUsageStats=false
 ```
 
-The checked-in `.streamlit/config.toml` defines the light theme and safe project
+The checked-in `.streamlit/config.toml` defines the Midnight Navy theme and safe project
 defaults. The launcher is recommended because it applies localhost settings even
 when started from another directory. Do not expose the server through a public
 address, tunnel or hosting service: there is deliberately no authentication system.
 Local binding is not encryption or protection against other users of your device.
 `.streamlit/secrets.toml` is ignored by Git; no Streamlit secrets are required or read
 by this application. Tests and smoke checks use temporary synthetic databases only.
+
+### Midnight Navy appearance and Safari preview
+
+The career workspace uses a large page title, a persistent navigation sidebar with
+route icons and clear section panels. Applications offers card and table tabs;
+Add Application separates the main form from a summary rail. Interview Practice
+places the question beside the response editor and shows STAR feedback in cards.
+Skills Roadmap groups career-goal and study-budget controls in two columns, then
+shows real saved or previewed weekly milestones as responsive cards. Comparison
+context and roadmap title settings remain available in labelled expanders. Cards
+show existing values only; there are no salary estimates or invented outcomes.
+
+All workspace pages share a Midnight Navy background (#090F20) with subtle navy gradients, violet accents,
+rounded cards and responsive layouts. Form controls have persistent lavender
+borders, readable placeholders and brighter focus indicators. Disabled fields
+retain readable text. Native tables retain their scrolling and toolbar controls.
+
+From this project directory, run:
+
+```sh
+.venv/bin/python -m streamlit run dashboard.py
+```
+
+Keep the terminal running and open `http://127.0.0.1:8501` in Safari. If Streamlit
+reports a different port, use its printed local URL. Reload an existing tab after
+restarting the server to pick up the theme. Stop the server with Control-C.
+This preview uses your existing database; use `AI_JOB_ASSISTANT_DATABASE` with a
+separate demo database if you want to experiment with saves.
+
+For repeatable offline browser checks, use an environment with Playwright and
+its Chromium browser already installed:
+
+```sh
+python tests/browser_dashboard_check.py --artifacts /tmp/job-dashboard-qa
+```
+
+The check starts the project’s `.venv` Streamlit server on an available localhost
+port, seeds a temporary synthetic database, blocks external browser requests,
+and checks all four pages at 390, 768 and 1440 pixels. It verifies field borders,
+focus states, disabled controls, offline feedback, progress, table toolbar access,
+absence of page-wide overflow and unchanged saved records. Screenshots and the
+server log go only to the requested artifacts directory. It makes no AI calls.
+Chromium automation does not replace a manual check in Safari.
 
 ### Overview, table and details
 
@@ -1264,10 +1307,21 @@ request, 30-second timeout, no tools, redirects or automatic retries, a 96,000-b
 request cap and 65,536-byte response cap. It uses strict structured output and
 validates every returned item locally. AI can select only fixed conditional coaching
 prompts for STAR, clarity or reasoning, each citing an exact safe answer passage
-with character offsets. It cannot provide free-form rewritten achievements, scores,
+with character offsets. The request supplies bounded, copyable quote/start pairs
+so the model need not count characters or guess punctuation boundaries. Local
+validation still checks every quote and offset against the same normalized answer;
+it never repairs offsets, searches for substitute evidence or accepts unsafe clauses.
+It cannot provide free-form rewritten achievements, scores,
 hiring probabilities or alter offline CV evidence states. Invalid output, refusal,
 missing credentials, unsupported models, rate limits and connection failures retain
-offline feedback with a generic safe notice. Request construction follows the
+offline feedback. New coaching requests display a fixed, safe error category for
+authentication, API billing/quota, rate limits, model availability, connection/timeout,
+request rejection, refusal or invalid/incomplete output (including the output token
+limit). Coaching structure, citation mismatches, unsafe boundaries and inappropriate
+STAR actions have distinct safe notices. Provider messages, response details, API keys and request headers are never
+displayed or logged. Credentials must be available in the dashboard process's
+environment; a key set in a separate terminal does not update an already running
+dashboard. Historical saved notices remain unchanged. Request construction follows the
 [official Structured Outputs documentation](https://developers.openai.com/api/docs/guides/structured-outputs).
 
 **Save reviewed attempt** records the exact answer, deterministic feedback and

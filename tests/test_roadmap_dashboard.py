@@ -125,3 +125,37 @@ def test_milestone_summary_displays_evidence_as_text(dashboard):
     assert any(t.value == evidence for t in at.text)
     assert all(evidence not in m.value for m in at.markdown)
     assert any("In Progress" in t.value for t in at.text)
+
+
+def test_studio_cards_show_saved_tasks_and_real_progress_without_writing(dashboard):
+    path, at = dashboard
+    create(at)
+    with storage.database(path) as connection:
+        saved = plans.get_roadmap(connection, 1)
+        before = list(connection.iterdump())
+    at.run()
+    assert not at.exception
+    shown = [text.value for text in at.text]
+    for milestone in saved["milestones"]:
+        for field in ("objective", "exercise", "project", "expected_evidence"):
+            assert milestone[field] in shown
+    metrics = {m.label: m.value for m in at.metric}
+    assert metrics["Weekly study budget"] == f"{saved['weekly_hours']} hours"
+    assert metrics["Completed milestones"] == f"0 / {len(saved['milestones'])}"
+    assert metrics["In progress"] == "0"
+    assert any(e.label == "Exercise & mini-project" for e in at.expander)
+    with storage.database(path) as connection:
+        assert list(connection.iterdump()) == before
+
+
+def test_studio_preview_keeps_exercises_unsaved(dashboard):
+    path, at = dashboard
+    click(at, "Preview skills roadmap")
+    assert {"Milestone preview", "Detailed plan"} <= {tab.label for tab in at.tabs}
+    with storage.database(path) as connection:
+        preview = plans.preview(connection, "ai-engineering-apprentice", "", 4)
+        assert plans.list_roadmaps(connection) == []
+    shown = [text.value for text in at.text]
+    for milestone in preview["milestones"]:
+        assert milestone["exercise"] in shown
+        assert milestone["project"] in shown

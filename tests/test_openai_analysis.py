@@ -181,3 +181,51 @@ def test_response_size_limit(cv, monkeypatch):
 
 def test_no_suggestions_is_valid(cv):
     assert ai.parse_response(envelope({"suggestions": []}), cv) == []
+
+
+def multipart_envelope(parts, **message_fields):
+    return json.dumps({"status": "completed", "output": [{
+        "type": "message", "role": "assistant", "status": "completed",
+        "content": [{"type": "output_text", "text": text} for text in parts],
+        **message_fields}]}).encode()
+
+
+@pytest.mark.parametrize("split", [1, 15, 45])
+def test_single_json_document_split_across_content_parts(split):
+    text = json.dumps(valid_payload())
+    assert ai.response_payload(multipart_envelope([text[:split], text[split:]])) == valid_payload()
+
+
+@pytest.mark.parametrize("parts", [
+    ['{"suggestions": []}', '{"suggestions": []}'],
+    ['```json\n', '{"suggestions": []}', '\n```'],
+    ['PRIVATE preamble ', '{"suggestions": []}'],
+    ['{"suggestions": [],', '"suggestions": []}'],
+    ['{"suggestions": [], "bad":', ' NaN}'],
+    ['x' * 8001, 'x' * 8000],
+    ['{"suggestions":', None],
+])
+def test_multipart_support_never_salvages_invalid_json_or_bypasses_limits(parts):
+    with pytest.raises(ai.OpenAIError) as caught:
+        ai.response_payload(multipart_envelope(parts))
+    assert caught.value.category == "invalid_response"
+    assert "PRIVATE" not in str(caught.value)
+
+
+@pytest.mark.parametrize("fields", [
+    {"role": "user"}, {"status": "incomplete"},
+    {"content": [{"type": "refusal", "refusal": "PRIVATE"}, {"type": "output_text", "text": '{"suggestions": []}'}]},
+    {"content": [None]}, {"content": {}},
+])
+def test_message_content_and_status_remain_strict(fields):
+    with pytest.raises(ai.OpenAIError) as caught:
+        ai.response_payload(multipart_envelope(['{"suggestions": []}'], **fields))
+    assert "PRIVATE" not in str(caught.value)
+
+
+def test_separate_messages_are_not_joined_to_manufacture_a_json_document():
+    envelope = json.loads(multipart_envelope(['{"suggestions":']))
+    envelope["output"].append({"type": "message", "role": "assistant", "status": "completed",
+                               "content": [{"type": "output_text", "text": '[]}'}]})
+    with pytest.raises(ai.OpenAIError):
+        ai.response_payload(json.dumps(envelope).encode())

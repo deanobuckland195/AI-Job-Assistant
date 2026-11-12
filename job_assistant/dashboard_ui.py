@@ -7,6 +7,7 @@ import streamlit as st
 
 from . import applications as apps, comparison_records, storage
 from . import dashboard_logic as logic
+from .dashboard_theme import DARK_STYLE, style_application_table
 from .cv_analysis import AnalysisError
 from .migrations import STATUSES
 from .interview_feedback import InterviewError
@@ -47,6 +48,7 @@ def application_form(path, record=None):
     with st.form(prefix + "form", clear_on_submit=False):
         st.subheader("New application" if creating else "Edit application")
         st.caption("Save deliberately. Changes stay in this form until you submit.")
+        st.caption("01 / ROLE DETAILS")
         left, right = st.columns(2)
         with left:
             company = st.text_input("Company *", record.get("company", ""), max_chars=200, key=prefix + "company")
@@ -56,12 +58,16 @@ def application_form(path, record=None):
             role = st.text_input("Role *", record.get("role", ""), max_chars=200, key=prefix + "role")
             url = st.text_input("Job URL", record.get("job_url") or "", max_chars=2048, key=prefix + "job_url", help="Optional HTTP(S) link. It will not be fetched.")
             deadline = date_widget("Application deadline", record.get("deadline"), prefix + "deadline")
+        st.divider()
         st.markdown("#### Next step")
+        st.caption("02 / PLAN YOUR FOLLOW-UP")
         next_action = st.text_area("Next action", record.get("next_action", ""), max_chars=1000, height=80, key=prefix + "next_action")
         follow_up = date_widget("Follow-up date", record.get("follow_up_date"), prefix + "follow_up", help="A date for this next action, independent of the application deadline.")
         completed = st.checkbox("This action is already completed", value=False, key=prefix + "completed") if creating else None
         if not creating:
             st.caption("Editing the next action reopens it. Use the completion button in the detail view after saving.")
+        st.divider()
+        st.caption("03 / NOTES & OPTIONAL LINKS")
         notes = st.text_area("Private notes", record.get("notes", ""), max_chars=10000, height=100, key=prefix + "notes", help="Local application notes. Avoid unnecessary sensitive information.")
         links = None
         if creating:
@@ -191,15 +197,40 @@ def application_list(path, rows):
     if not filtered:
         st.info("No applications match these filters. Clear the search or adjust the filters to see more.")
         return
-    size = st.selectbox("Rows per page", [25, 50, 100], key="page_size")
+    page_size_col, page_col = st.columns([1, 1])
+    with page_size_col:
+        size = st.selectbox("Rows per page", [25, 50, 100], key="page_size")
     pages = (len(filtered) + size - 1) // size
     page_key = f"page_{search}_{','.join(statuses)}_{timing}_{size}"
     if page_key in st.session_state and not 1 <= st.session_state[page_key] <= pages:
         st.session_state[page_key] = 1
-    page = st.number_input("Page", min_value=1, max_value=pages, value=1, step=1, key=page_key)
+    with page_col:
+        page = st.number_input("Page", min_value=1, max_value=pages, value=1, step=1, key=page_key)
     visible = filtered[(page - 1) * size:page * size]
     st.caption(f"{len(filtered)} matching applications · page {page} of {pages}. Deadline and follow-up states use text, not colour alone.")
-    st.dataframe(logic.table_records(visible), hide_index=True, width="stretch", key="applications_table")
+    cards_tab, table_tab = st.tabs(["Application cards", "Table view"])
+    with cards_tab:
+        with st.container(key="application_grid"):
+            for start in range(0, len(visible), 3):
+                for column, row in zip(st.columns(3), visible[start:start + 3]):
+                    with column.container(border=True, key=f"application_card_{row['id']}"):
+                        st.caption(f"APPLICATION #{row['id']}")
+                        st.text(row["company"])
+                        st.text(row["role"])
+                        st.badge(row["status"].title(), color="violet")
+                        st.divider()
+                        st.caption("NEXT ACTION")
+                        st.text(row["next_action"] or "No next action recorded")
+                        st.caption(logic.action_timing(row))
+                        st.divider()
+                        st.caption(f"Applied · {row['application_date'] or 'Not recorded'}")
+                        st.caption(f"Deadline · {row['deadline'] or 'Not set'}")
+                        st.caption(f"Follow-up · {row.get('follow_up_date') or 'Not set'}")
+                        if st.button("View & manage", key=f"manage_application_{row['id']}", width="stretch"):
+                            st.session_state["open_application"] = row["id"]
+                            st.rerun()
+    with table_tab:
+        st.dataframe(style_application_table(logic.table_records(visible)), hide_index=True, width="stretch", key="applications_table")
     options = [None, *[row["id"] for row in visible]]
     if st.session_state.get("open_application") not in options:
         st.session_state["open_application"] = None
@@ -212,35 +243,37 @@ def application_list(path, rows):
 def run():
     st.set_page_config(page_title="AI Job Assistant", page_icon="💼", layout="wide", initial_sidebar_state="expanded")
     # Static CSS only: no user text or database values enter this HTML.
-    st.markdown("""<style>
-    .block-container{padding-top:2rem;max-width:1440px}
-    div[data-testid=stMetricValue]{font-size:clamp(1.5rem,3vw,2rem)}
-    @media(max-width:640px){
-      .block-container{padding:1.25rem 1rem 2rem}
-      h1{font-size:1.9rem}h2{font-size:1.5rem}
-    }
-    </style>""", unsafe_allow_html=True)
+    st.markdown(DARK_STYLE, unsafe_allow_html=True)
     path = logic.database_path()
     scope = str(path.resolve())
     if st.session_state.get("database_scope") not in (None, scope):
         st.session_state.clear()
     st.session_state["database_scope"] = scope
     with st.sidebar:
-        st.title("AI Job Assistant")
-        st.caption("CAREER WORKSPACE")
+        with st.container(key="brand"):
+            st.title("AI Job Assistant")
+            st.caption("CAREER WORKSPACE")
+        st.caption("MAIN MENU")
         view = st.radio("Workspace", ["Applications", "Add application", "Interview Practice", "Skills Roadmap"], key="workspace")
         st.divider()
         st.caption("Local by default. Interview AI coaching sends only a question and answer after explicit consent. CV passages are never sent for coaching.")
         if st.button("Refresh list", key="refresh"):
             st.rerun()
-    st.title(view if view in ("Interview Practice", "Skills Roadmap") else "Application tracker")
     descriptions = {
         "Applications": "Keep your search moving, one clear next step at a time.",
         "Add application": "Save a role and plan the next action. Required fields are marked *.",
         "Interview Practice": "Practise, review evidence and save an attempt. Offline feedback is always available.",
         "Skills Roadmap": "Plan manageable weekly learning and record honest evidence of progress.",
     }
-    st.caption(descriptions[view])
+    with st.container(key="workspace_bar"):
+        location, welcome = st.columns([1.5, 1])
+        location.caption("AI JOB ASSISTANT  /  " + view.upper())
+        welcome.text("Your next chapter starts here.")
+    titles = {"Applications": "Your Career Dashboard", "Add application": "Add Your Next Opportunity",
+              "Interview Practice": "Prepare for Your Next Interview", "Skills Roadmap": "Build Your Career Roadmap"}
+    with st.container(key="page_intro"):
+        st.title(titles[view])
+        st.caption(descriptions[view])
     if "notice" in st.session_state:
         st.success(st.session_state.pop("notice"))
     try:
@@ -255,16 +288,25 @@ def run():
         with storage.database(path) as connection:
             counts = logic.overview(connection)
             rows, capped = logic.load_rows(connection)
-        for column, (label, value) in zip(st.columns(5), counts.items()):
-            with column.container(border=True):
-                st.metric(label, value)
-        st.caption("Overview covers all records. Active = applied, interviewing and offered; interviews/offers are subsets.")
         if capped:
             st.warning("The table searches the newest 10,000 applications. Overview totals include all records; use the CLI for older entries.")
         if view == "Add application":
-            application_form(path)
+            form_panel, summary_panel = st.columns([3, 1], gap="large")
+            with form_panel:
+                application_form(path)
+            with summary_panel.container(border=True, key="application_summary"):
+                st.markdown("#### Your search at a glance")
+                for label, value in counts.items():
+                    st.metric(label, value)
+                st.caption("All saved records. Active includes interviews and offers.")
         else:
-            application_list(path, rows)
+            with st.container(key="overview"):
+                for column, (label, value) in zip(st.columns(5), counts.items()):
+                    with column:
+                        st.metric(label, value)
+            st.caption("Overview covers all records. Active = applied, interviewing and offered; interviews/offers are subsets.")
+            with st.container(key="application_listing", border=True):
+                application_list(path, rows)
     except EXPECTED as error:
         st.error(str(error) + " Refresh the list or reload the record before trying again.")
     except (OSError, sqlite3.Error):

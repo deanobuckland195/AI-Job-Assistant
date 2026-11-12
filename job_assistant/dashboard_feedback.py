@@ -23,14 +23,14 @@ def render_feedback(feedback):
     if feedback["question_kind"] == "behavioural":
         st.markdown("#### STAR structure")
         parts = list(feedback["star"].items())
-        for start in (0, 2):
-            for column, (name, part) in zip(st.columns(2), parts[start:start + 2]):
-                with column.container(border=True):
-                    st.markdown("##### " + name.title())
-                    st.text(STATE_LABELS.get(part["state"], "Review this section"))
-                    st.text(part["guidance"])
-                    for evidence in part["answer_evidence"]:
-                        evidence_text(evidence)
+        for column, (name, part) in zip(st.columns(4), parts):
+            with column.container(border=True):
+                st.caption(name[0].upper() + " / STAR")
+                st.markdown("##### " + name.title())
+                st.text(STATE_LABELS.get(part["state"], "Review this section"))
+                st.text(part["guidance"])
+                for evidence in part["answer_evidence"]:
+                    evidence_text(evidence)
     else:
         st.info("STAR is optional for this question. Give a direct explanation, your reasoning, a truthful example where useful, and limitations.")
     st.markdown("#### Evidence behind your claims")

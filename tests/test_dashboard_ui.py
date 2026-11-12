@@ -215,3 +215,19 @@ def test_stale_delete_does_not_remove_updated_record(dashboard):
     assert any("changed since review" in error.value for error in at.error)
     with storage.database(path) as connection:
         assert apps.get_application(connection, app_id)["notes"] == "CLI updated"
+
+
+def test_card_management_opens_existing_record_without_writing(dashboard):
+    path, at = dashboard
+    app_id = seed(path, application_date=date.today().isoformat(), next_action="Prepare project")
+    with storage.database(path) as connection:
+        before = list(connection.iterdump())
+    at.run()
+    assert any(c.value == "Applied · " + date.today().isoformat() for c in at.caption)
+    assert any(c.value == "Deadline · Not set" for c in at.caption)
+    button(at, "View & manage").click().run()
+    assert not at.exception
+    assert at.selectbox(key="open_application").value == app_id
+    assert at.text_input(key="edit_1_1_company").value == "Synthetic Ltd"
+    with storage.database(path) as connection:
+        assert list(connection.iterdump()) == before
